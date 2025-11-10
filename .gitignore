@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Fichiers d'environnement (secrets)
+.env
+*.env
+
+# Fichiers Streamlit (au cas où)
+.streamlit/secrets.toml
+
+# Fichiers VS Code
+.vscode/
+
+# Fichiers système
+.DS_Store

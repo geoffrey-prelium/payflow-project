@@ -1,0 +1,24 @@
+# Utilise une image Python 3.10 officielle
+FROM python:3.10-slim
+
+# Définit le répertoire de travail dans le conteneur
+WORKDIR /app
+
+# Copie d'abord requirements.txt pour optimiser le cache Docker
+COPY requirements.txt ./
+
+# Installe les dépendances
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copie les fichiers de l'application ET les images
+COPY app.py ./
+COPY lpde.png ./
+COPY prelium.gif ./
+
+# Variable d'environnement pour que Streamlit s'exécute correctement
+ENV PORT 8080
+EXPOSE 8080
+
+# Commande pour lancer l'application Streamlit
+HEALTHCHECK CMD curl --fail http://localhost:8080/_stcore/health
+ENTRYPOINT ["python", "-m", "streamlit", "run", "app.py", "--server.port", "8080", "--server.address", "0.0.0.0"]
