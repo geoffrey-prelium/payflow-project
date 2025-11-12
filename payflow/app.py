@@ -25,10 +25,9 @@ st.write("Interface de configuration et de monitoring des imports Silae ➔ Odoo
 
 # --- Logos ---
 with st.sidebar:
-    st.subheader("Piloté par")
     try: st.image("lpde.png", width=200)
     except Exception: st.warning("Image lpde.png non trouvée.")
-    st.subheader("Développé pour")
+    st.write("---")
     try: st.image("prelium.gif", width=200)
     except Exception: st.warning("Image prelium.gif non trouvée.")
 

@@ -54,24 +54,26 @@ Secrets (Secret Manager) :
 
 Stocke les 3 clés API globales du cabinet pour Silae : SILAE_CLIENT_ID, SILAE_CLIENT_SECRET, SILAE_SUBSCRIPTION_KEY.
 
+[Image de l'architecture technique de PayFlow sur GCP]
+
 🗃️ Structure du Dépôt
 
 Ce dépôt est un "monorepo" contenant les deux services dans des dossiers séparés.
 
 /
-├── .gitignore
-├── README.md
+├── .gitignore               # Fichiers à ignorer par Git
+├── README.md                # Ce fichier
 │
-├── payflow-app/
-│   ├── app.py
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   ├── lpde.png
-│   └── prelium.gif
+├── payflow-app/             # Projet de l'application Streamlit (Cloud Run)
+│   ├── app.py               # Le code du tableau de bord
+│   ├── Dockerfile           # Instructions pour le conteneur Cloud Run
+│   ├── requirements.txt     # Dépendances Python de l'app
+│   ├── lpde.png             # Logo
+│   └── prelium.gif          # Logo
 │
-└── payflow-function/
-    ├── main.py
-    └── requirements.txt
+└── payflow-function/        # Projet de la fonction automatisée (Cloud Function)
+    ├── main.py              # Le code du moteur d'import
+    └── requirements.txt     # Dépendances Python de la fonction
 
 
 🚀 Guide de Déploiement
@@ -139,14 +141,14 @@ Rôles requis : Secret Manager Secret Accessor, Cloud Datastore User.
 Naviguez dans le dossier payflow-function et exécutez :
 
 # Remplacez [PROJECT_ID] et [SERVICE_ACCOUNT_EMAIL]
-gcloud functions deploy process_monthly_import \
-  --runtime python310 \
-  --trigger-topic payflow-monthly-trigger \
-  --entry-point process_monthly_import \
-  --region europe-west1 \
-  --project=[PROJECT_ID] \
-  --set-env-vars="GCP_PROJECT=[PROJECT_ID]" \
-  --service-account=[SERVICE_ACCOUNT_EMAIL] \
+gcloud functions deploy process_monthly_import `
+  --runtime python310 `
+  --trigger-topic payflow-monthly-trigger `
+  --entry-point process_monthly_import `
+  --region europe-west1 `
+  --project=[PROJECT_ID] `
+  --set-env-vars="GCP_PROJECT=[PROJECT_ID]" `
+  --service-account=[SERVICE_ACCOUNT_EMAIL] `
   --timeout=540s
 
 
@@ -155,13 +157,13 @@ gcloud functions deploy process_monthly_import \
 Naviguez dans le dossier payflow-app et exécutez :
 
 # Remplacez [PROJECT_ID] et [SERVICE_ACCOUNT_EMAIL]
-gcloud run deploy payflow-app \
-  --source . \
-  --platform managed \
-  --region europe-west1 \
-  --allow-unauthenticated \
-  --project=[PROJECT_ID] \
-  --set-env-vars="GCP_PROJECT=[PROJECT_ID]" \
+gcloud run deploy payflow-app `
+  --source . `
+  --platform managed `
+  --region europe-west1 `
+  --allow-unauthenticated `
+  --project=[PROJECT_ID] `
+  --set-env-vars="GCP_PROJECT=[PROJECT_ID]" `
   --service-account=[SERVICE_ACCOUNT_EMAIL]
 
 
@@ -205,7 +207,11 @@ Jour du mois pour le transfert (ex: 10 pour que l'import se fasse le 10 de chaqu
 
 Les informations de connexion Odoo (Hôte, Base, Login, Clé API)
 
-Testez la connexion et sélectionnez le Journal Paie Odoo.
+Testez la connexion pour charger les Sociétés et Journaux.
+
+Sélectionnez la bonne Société Odoo (très important en multi-société).
+
+Sélectionnez le Journal Paie Odoo approprié.
 
 Sauvegardez le client.
 
@@ -220,6 +226,8 @@ Le tableau de bord affiche les succès (SUCCESS) et les échecs (ERROR).
 Si status = ERROR_ACCOUNT : L'utilisateur doit contacter l'admin pour corriger la Liaison Comptable dans Silae (un compte est manquant ou erroné).
 
 Si status = ERROR_ODOO_RPC : L'utilisateur doit contacter l'admin pour vérifier les identifiants Odoo (clé API expirée, etc.).
+
+Si status = ERROR_ODOO_RPC: <Fault ... company inconsistencies ...> : L'admin doit corriger la Société Odoo sélectionnée dans l'onglet Admin de PayFlow.
 
 3. Import Manuel (par l'Admin)
 
