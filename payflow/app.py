@@ -544,7 +544,7 @@ with tab_admin:
     
     st.divider()
     
-    st.subheader("Clients surfactants configurés")
+    st.subheader("Clients configurés")
     if not CLIENTS_CONFIG:
         st.info("Aucun client configuré.")
     else:
@@ -556,7 +556,7 @@ with tab_admin:
                 "Hôte Odoo": config.get("odoo_host", "N/A"),
                 "Base Odoo": config.get("database_odoo", "N/A"),
                 "Journal Paie Odoo": config.get("journal_paie_odoo", "N/A"),
-                "ID Société Odoo": config.get("odoo_company_id", "N/A") # Ajout pour vérification
+                "ID Société Odoo": config.get("odoo_company_id", "Non concerné") # Ajout pour vérification
             })
         st.dataframe(pd.DataFrame(clients_list), use_container_width=True)
 
