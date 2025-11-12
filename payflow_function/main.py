@@ -1,3 +1,5 @@
+# main.py - Version 3.2 (Correction Syntaxe Odoo 'read')
+
 import base64
 import json
 import os
@@ -5,7 +7,7 @@ import traceback
 from datetime import datetime
 import xmlrpc.client
 from urllib.parse import quote
-import pandas as pd # Requis pour la gestion des dates
+import pandas as pd 
 
 import requests
 from google.cloud import firestore, secretmanager
@@ -26,7 +28,7 @@ except Exception as e:
     SECRET_CLIENT = None
     DB = None
 
-# --- Fonctions Helpers (Inchangées) ---
+# --- Fonctions Helpers (Authentification Silae - Inchangées) ---
 
 def load_silae_secrets():
     """Charge les secrets Silae depuis Secret Manager."""
@@ -38,14 +40,13 @@ def load_silae_secrets():
     try:
         for key in secrets_to_fetch:
             name = f"projects/{PROJECT_ID}/secrets/{key}/versions/latest"
+            # --- CORRECTION : 'client' n'était pas défini ---
             response = SECRET_CLIENT.access_secret_version(request={"name": name})
             value = response.payload.data.decode("UTF-8").strip()
             config_key = key.split('_', 1)[-1].lower()
             config[config_key] = value
-        
         if not all(k in config for k in ['client_id', 'client_secret', 'subscription_key']):
              raise ValueError("Un ou plusieurs secrets Silae sont manquants.")
-             
         return config
     except Exception as e:
         print(f"ERREUR: Échec du chargement des secrets Silae: {e}")
@@ -59,12 +60,10 @@ def get_silae_token(silae_config):
         client_secret = quote(silae_config.get("client_secret", ""))
         if not client_id or not client_secret:
             raise ValueError("ID Client ou Secret Client Silae manquant.")
-        
         grant_type = "client_credentials"
         scope = quote("https://silaecloudb2c.onmicrosoft.com/36658aca-9556-41b7-9e48-77e90b006f34/.default")
         auth_data_string = f"grant_type={grant_type}&client_id={client_id}&client_secret={client_secret}&scope={scope}"
         auth_headers = {"Content-Type": "application/x-www-form-urlencoded"}
-        
         response = requests.post(auth_url, data=auth_data_string, headers=auth_headers, timeout=15)
         response.raise_for_status()
         return response.json()["access_token"]
@@ -81,7 +80,6 @@ def get_silae_ecritures(access_token, silae_config, numero_dossier, date_debut, 
     subscription_key = silae_config.get("subscription_key")
     if not subscription_key:
         raise ValueError("Clé d'abonnement Silae manquante.")
-        
     api_headers = {"Authorization": f"Bearer {access_token}", "Ocp-Apim-Subscription-Key": subscription_key, "Content-Type": "application/json", "dossiers": str(numero_dossier)}
     api_body = {"numeroDossier": str(numero_dossier), "periodeDebut": date_debut.strftime('%Y-%m-%d'), "periodeFin": date_fin.strftime('%Y-%m-%d'), "avecToutesLesRepartitionsAnalytiques": False}
     try:
@@ -95,91 +93,90 @@ def get_silae_ecritures(access_token, silae_config, numero_dossier, date_debut, 
             except json.JSONDecodeError: error_details = e.response.text
         raise Exception(f"Échec de la récupération des écritures Silae (Dossier {numero_dossier}): {e} - Détails: {error_details}")
 
+# --- MODIFICATION ICI ---
 def import_to_odoo_auto(client_config, ecritures_data, period_str):
-    """Tente d'importer les écritures dans Odoo via XML-RPC (SANS MAPPING APPLICATIF)."""
+    """Tente d'importer les écritures dans Odoo via XML-RPC (Gère le Multi-Société)."""
     host = client_config.get('odoo_host')
     db = client_config.get('database_odoo')
     username = client_config.get('odoo_login')
     password = client_config.get('odoo_password')
     journal_code = client_config.get('journal_paie_odoo')
-    if not all([host, db, username, password, journal_code]):
-        raise ValueError("Configuration Odoo manquante dans Firestore (host, db, login, password ou journal).")
     
+    company_id = client_config.get('odoo_company_id') 
+
+    if not all([host, db, username, password, journal_code]):
+        raise ValueError("Configuration Odoo manquante (host, db, login, password ou journal).")
+    
+    if not company_id:
+        raise ValueError(f"ID de société Odoo (odoo_company_id) manquant pour le client {client_config.get('nom')}. Veuillez reconfigurer le client dans PayFlow.")
+
     if ".odoo.com" in host:
-        url = f"https://{host}/xmlrpc"
+        url_common = f"https://{host}/xmlrpc/common"
+        url_object = f"https://{host}/xmlrpc/object"
     else:
-        url = f"https://{host}/xmlrpc/2"
-
-    journal_silae = ecritures_data['ruptures'][0]
-    lignes_silae = journal_silae.get('ecritures')
-    if not lignes_silae:
-        return "SUCCESS_EMPTY", "Journal Silae vide, rien à importer."
-
-    comptes_odoo_a_verifier = set()
-    lignes_pour_odoo = []
-    for ligne in lignes_silae:
-        code_compte = ligne['compte'] 
-        lignes_pour_odoo.append({
-            'account_code': code_compte,
-            'name': ligne['libelle'],
-            'debit': ligne['valeur'] if ligne['sens'] == 'D' else 0.0,
-            'credit': ligne['valeur'] if ligne['sens'] == 'C' else 0.0
-        })
-        comptes_odoo_a_verifier.add(code_compte)
+        url_common = f"https://{host}/xmlrpc/2/common"
+        url_object = f"https://{host}/xmlrpc/2/object"
 
     try:
-        common = xmlrpc.client.ServerProxy(f"{url}/common")
+        journal_silae = ecritures_data['ruptures'][0]
+        lignes_silae = journal_silae.get('ecritures')
+        if not lignes_silae:
+            return "SUCCESS_EMPTY", "Journal Silae vide, rien à importer."
+
+        comptes_odoo_a_verifier = set()
+        lignes_pour_odoo = []
+        for ligne in lignes_silae:
+            code_compte = ligne['compte'] 
+            lignes_pour_odoo.append({'account_code': code_compte, 'name': ligne['libelle'], 'debit': ligne['valeur'] if ligne['sens'] == 'D' else 0.0, 'credit': ligne['valeur'] if ligne['sens'] == 'C' else 0.0})
+            comptes_odoo_a_verifier.add(code_compte)
+        
+        common = xmlrpc.client.ServerProxy(url_common)
         uid = common.authenticate(db, username, password, {})
         if not uid:
             raise Exception("Échec d'authentification Odoo. Vérifiez les identifiants.")
             
-        models = xmlrpc.client.ServerProxy(f"{url}/object")
+        models = xmlrpc.client.ServerProxy(url_object)
+        
+        context = {'allowed_company_ids': [company_id]} 
+        
         def execute(model, method, *args, **kwargs):
+            kwargs.setdefault('context', {}).update(context)
             return models.execute_kw(db, uid, password, model, method, args, kwargs)
 
         domain_comptes = [('code', 'in', list(comptes_odoo_a_verifier))]
         fields_comptes = ['code', 'id']
         account_data = execute('account.account', 'search_read', domain_comptes, fields=fields_comptes)
+        
         code_to_id_map = {acc['code']: acc['id'] for acc in account_data}
         comptes_manquants = comptes_odoo_a_verifier - set(code_to_id_map.keys())
         if comptes_manquants:
-            return "ERROR_ACCOUNT", f"Comptes Odoo introuvables: {sorted(list(comptes_manquants))}. Vérifiez la liaison comptable Silae."
+            return "ERROR_ACCOUNT", f"Comptes Odoo introuvables: {sorted(list(comptes_manquants))}. Vérifiez la liaison Silae ET que la bonne société Odoo est sélectionnée."
 
         domain_journal = [('code', '=', journal_code)]
         journal_id = execute('account.journal', 'search', domain_journal, limit=1)
         if not journal_id:
-            return "ERROR_JOURNAL", f"Journal Odoo introuvable (Code: '{journal_code}'). Vérifiez la config client."
+            return "ERROR_JOURNAL", f"Journal Odoo introuvable (Code: '{journal_code}') dans la société ID {company_id}. Vérifiez la config client."
         journal_id = journal_id[0]
-
         lignes_finales = []
         for ligne in lignes_pour_odoo:
-            lignes_finales.append((0, 0, {
-                'account_id': code_to_id_map[ligne['account_code']],
-                'name': ligne['name'],
-                'debit': ligne['debit'],
-                'credit': ligne['credit'],
-            }))
-
-        move_vals = {
-            'journal_id': journal_id,
-            'ref': journal_silae.get('libelle', f"Import Paie Silae {period_str}"),
-            'date': datetime.now().strftime('%Y-%m-%d'),
-            'line_ids': lignes_finales
-        }
+            lignes_finales.append((0, 0, {'account_id': code_to_id_map[ligne['account_code']], 'name': ligne['name'], 'debit': ligne['debit'], 'credit': ligne['credit']}))
+        
+        move_vals = {'journal_id': journal_id, 'ref': journal_silae.get('libelle', f"Import Paie Silae {period_str}"), 'date': datetime.now().strftime('%Y-%m-%d'), 'line_ids': lignes_finales}
         move_id = execute('account.move', 'create', move_vals)
         
-        move_info = execute('account.move', 'read', [move_id], fields=['name'])
+        # --- CORRECTION ICI : [move_id] devient [move_id] (liste d'IDs) et le kwarg 'fields' devient une liste positionnelle ['name'] ---
+        move_info = execute('account.move', 'read', [move_id], ['name']) 
         move_name = move_info[0].get('name') if move_info and move_info[0].get('name') else f"ID {move_id}"
-
         return "SUCCESS", f"Pièce créée (Brouillon): {move_name}"
-
+    
     except xmlrpc.client.Fault as e:
         print(f"ERREUR XML-RPC (Client: {client_config.get('nom', 'N/A')}): {e.faultString}")
-        return "ERROR_ODOO_RPC", f"Erreur Odoo: {e.faultString}"
+        return "ERROR_ODOO_RPC", f"Erreur Odoo (Fault): {str(e)}"
     except Exception as e:
         print(f"ERREUR Inattendue (Import Odoo pour {client_config.get('nom', 'N/A')}): {e}")
         traceback.print_exc()
-        return "ERROR_UNKNOWN", f"Erreur inattendue: {e}"
+        return "ERROR_UNKNOWN", f"Erreur inattendue: {str(e)}"
+# --- FIN DE LA MODIFICATION ---
 
 def log_execution(client_doc_id, client_name, period_str, status, message):
     """Enregistre le résultat dans la collection payflow_logs de Firestore."""
@@ -217,7 +214,6 @@ def process_monthly_import(event, context):
     today = datetime.utcnow()
     current_day = today.day # Ex: 10
     
-    # Calcule la période de paie (le mois précédent)
     first_day_current_month = today.replace(day=1)
     last_day_previous_month = first_day_current_month - pd.Timedelta(days=1)
     first_day_previous_month = last_day_previous_month.replace(day=1)
@@ -241,9 +237,6 @@ def process_monthly_import(event, context):
         return
         
     try:
-        # --- MODIFICATION DE LA REQUÊTE ---
-        # On ne prend que les clients dont le 'jour_transfert' == le jour actuel
-        # Note : 'jour_transfert' doit être stocké comme un NOMBRE (Number) dans Firestore
         clients_ref = DB.collection("payflow_clients").where(
             "jour_transfert", "==", current_day
         ).stream()
