@@ -14,6 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py ./
 COPY lpde.png ./
 COPY prelium.gif ./
+COPY odoo.png ./
 
 # Variable d'environnement pour que Streamlit s'exécute correctement
 ENV PORT 8080
