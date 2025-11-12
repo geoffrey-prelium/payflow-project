@@ -410,12 +410,12 @@ else:
     # --- MODIFIÉ : L'application principale est maintenant dans ce 'else' ---
 
     # --- NOUVEAU : Affichage du titre avec logo Odoo ---
-    col1, col2, col3 = st.columns([0.1, 0.7, 0.2]) # Ajustez les ratios si besoin
+    col1, col2, col3 = st.columns([0.7, 0.1, 0.2]) # Ajustez les ratios si besoin
 
     with col1:
-        st.write("") # Colonne vide pour l'alignement si nécessaire, ou vous pouvez y mettre une petite icône Silae par exemple
+        st.title("🚀 PayFlow - Tableau de Bord") # Colonne vide pour l'alignement si nécessaire, ou vous pouvez y mettre une petite icône Silae par exemple
     with col2:
-        st.title("🚀 PayFlow - Tableau de Bord")
+        st.write("")
     with col3:
         try:
             # Assurez-vous que l'image 'odoo.png' est bien présente au même niveau que 'app.py'
