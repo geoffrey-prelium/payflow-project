@@ -1,240 +1,192 @@
-🚀 PayFlow
+# 🚀 PayFlow
 
-Connecteur Silae ➔ Odoo automatisé.
+## Connecteur Silae ➔ Odoo automatisé
 
-PayFlow est un outil interne conçu pour automatiser l'import des écritures comptables de paie depuis Silae vers Odoo. Il est conçu pour un cabinet comptable gérant plusieurs dossiers clients.
+PayFlow est un outil interne conçu pour automatiser l'import des écritures comptables de paie depuis Silae vers Odoo.  
+Il est conçu pour un cabinet comptable gérant plusieurs dossiers clients.
 
-Le système est divisé en deux composants principaux :
+Le système repose sur deux composants principaux :
 
-Une application web (tableau de bord) pour l'administration et le monitoring.
+- Application web (tableau de bord) pour l'administration et le monitoring.  
+- Fonction serverless (moteur) pour l'exécution automatique des tâches.
 
-Une fonction serverless (moteur) pour l'exécution automatique des tâches.
+---
 
-⚙️ Architecture
+## ⚙️ Architecture
 
 Le projet est hébergé entièrement sur Google Cloud Platform (GCP) et utilise les services suivants :
 
-payflow-app (Le Tableau de Bord) :
+### `payflow-app` (Le Tableau de Bord)
 
-Service : Application Streamlit (app.py) déployée sur Cloud Run.
+- **Service** : Application Streamlit (`app.py`) déployée sur Cloud Run.  
+- **Rôle** :
+  - Gérer les clients : ajouter, modifier ou lister les connexions (ID Silae, Hôte Odoo, base, login, clé API, jour du transfert).  
+  - Consulter les logs : afficher les journaux d’exécution (succès, échecs).  
+  - Lancer un import manuel : forcer une exécution pour un client et une période donnée.
 
-Rôle : Permet aux administrateurs de :
+### `payflow-function` (Le Moteur)
 
-Gérer les clients : Ajouter, modifier ou lister les connexions (ID Silae, Hôte Odoo, base de données, login, clé API, et jour du transfert).
+- **Service** : Fonction Python (`main.py`) déployée sur Cloud Functions.  
+- **Déclencheur** : Job Cloud Scheduler exécuté chaque jour (ex : 3h du matin).  
+- **Rôle** :
+  - Vérifie la date du jour (ex : "10").  
+  - Interroge Firestore pour trouver les clients avec `jour_transfert = 10`.  
+  - Exécute l’import Silae ➔ Odoo pour le mois précédent.  
+  - Enregistre un log de succès ou d’échec dans `payflow_logs`.
 
-Consulter les logs : Afficher un journal des exécutions (succès et échecs) pour surveiller le bon fonctionnement du système.
+### Bases de Données (Firestore)
 
-Lancer un import manuel : Permet de forcer l'exécution pour un client et une période spécifique (pour débogage ou rattrapage).
+- **Base** : `payflow-db`
+- **Collections** :
+  - `payflow_clients` : stocke la configuration de chaque client.
+  - `payflow_logs` : historique des exécutions (auto/manuelles).
 
-payflow-function (Le Moteur) :
+### Secrets (Secret Manager)
 
-Service : Fonction Python (main.py) déployée sur Cloud Functions.
+Contient les 3 clés API globales du cabinet pour Silae :
 
-Déclencheur : Un job Cloud Scheduler s'exécute tous les jours (ex: 3h du matin).
+- `SILAE_CLIENT_ID`  
+- `SILAE_CLIENT_SECRET`  
+- `SILAE_SUBSCRIPTION_KEY`
 
-Rôle :
 
-La fonction se réveille et vérifie la date du jour (ex: "10").
+---
 
-Elle interroge Firestore pour trouver tous les clients dont le champ jour_transfert est égal à 10.
+## 🗃️ Structure du Dépôt
 
-Pour chaque client trouvé, elle exécute l'import Silae ➔ Odoo pour le mois précédent.
-
-Elle enregistre un log de succès ou d'échec dans la base payflow_logs.
-
-Bases de Données (Firestore) :
-
-Base : payflow-db
-
-Collection payflow_clients : Stocke la configuration de chaque client.
-
-Collection payflow_logs : Stocke un historique de chaque exécution (automatique ou manuelle).
-
-Secrets (Secret Manager) :
-
-Stocke les 3 clés API globales du cabinet pour Silae : SILAE_CLIENT_ID, SILAE_CLIENT_SECRET, SILAE_SUBSCRIPTION_KEY.
-
-[Image de l'architecture technique de PayFlow sur GCP]
-
-🗃️ Structure du Dépôt
-
-Ce dépôt est un "monorepo" contenant les deux services dans des dossiers séparés.
-
+```
 /
-├── .gitignore               # Fichiers à ignorer par Git
-├── README.md                # Ce fichier
+├── .gitignore                 # Fichiers à ignorer par Git
+├── README.md                  # Ce fichier
 │
-├── payflow-app/             # Projet de l'application Streamlit (Cloud Run)
-│   ├── app.py               # Le code du tableau de bord
-│   ├── Dockerfile           # Instructions pour le conteneur Cloud Run
-│   ├── requirements.txt     # Dépendances Python de l'app
-│   ├── lpde.png             # Logo
-│   └── prelium.gif          # Logo
+├── payflow-app/               # Application Streamlit (Cloud Run)
+│   ├── app.py                 # Code du tableau de bord
+│   ├── Dockerfile             # Instructions du conteneur
+│   ├── requirements.txt       # Dépendances Python
+│   ├── lpde.png               # Logo
+│   └── prelium.gif            # Logo
 │
-└── payflow-function/        # Projet de la fonction automatisée (Cloud Function)
-    ├── main.py              # Le code du moteur d'import
-    └── requirements.txt     # Dépendances Python de la fonction
+└── payflow-function/          # Fonction automatisée (Cloud Function)
+    ├── main.py                # Code du moteur d'import
+    └── requirements.txt       # Dépendances Python
+```
 
+---
 
-🚀 Guide de Déploiement
+## 🚀 Guide de Déploiement
 
-Pour déployer ce projet sur un nouveau compte GCP :
+### 1. Prérequis GCP
 
-1. Prérequis GCP
+- Projet GCP (ex : `payflow-476410`)  
+- SDK `gcloud` installé et connecté (`gcloud auth login`)  
+- APIs activées :
+  - Cloud Run API  
+  - Cloud Functions API  
+  - Cloud Build API  
+  - Secret Manager API  
+  - Cloud Scheduler API  
+  - Eventarc API (pour triggers Pub/Sub)  
+  - Cloud Datastore API (pour Firestore)
 
-Un projet GCP (ex: payflow-476410).
+### 2. Configuration des Secrets 🔑
 
-Le SDK gcloud installé et authentifié (gcloud auth login).
+Créer les secrets dans **Secret Manager** :
 
-Les API suivantes activées :
+- `SILAE_CLIENT_ID`  
+- `SILAE_CLIENT_SECRET`  
+- `SILAE_SUBSCRIPTION_KEY`
 
-Cloud Run API
+### 3. Configuration de Firestore 🗃️
 
-Cloud Functions API
+- Mode : Natif  
+- ID de la base : `payflow-db`  
+- Région : `europe-west1`  
+- Laisser les collections vides (elles seront créées automatiquement).
 
-Cloud Build API
+### 4. Permissions (IAM) ⚙️
 
-Secret Manager API
+Deux comptes de service sont requis :
 
-Cloud Scheduler API
+- **Cloud Run** :  
+  - Rôles : Secret Manager Secret Accessor, Cloud Datastore User  
+- **Cloud Function** :  
+  - Rôles : Secret Manager Secret Accessor, Cloud Datastore User  
 
-Eventarc API (pour les triggers Pub/Sub)
+### 5. Déploiement de la Cloud Function (Moteur)
 
-Cloud Datastore API (pour Firestore)
-
-2. Configuration des Secrets 🔑
-
-Allez dans Secret Manager et créez les 3 secrets suivants avec les valeurs fournies par Silae :
-
-SILAE_CLIENT_ID
-
-SILAE_CLIENT_SECRET
-
-SILAE_SUBSCRIPTION_KEY
-
-3. Configuration de Firestore 🗃️
-
-Allez dans Firestore et créez une base de données avec les paramètres suivants :
-
-Mode : Natif
-
-ID de la base de données : payflow-db
-
-Région : (ex: europe-west1)
-
-Laissez les collections vides. L'application et la fonction les créeront.
-
-4. Permissions (IAM) ⚙️
-
-Vous avez besoin de deux comptes de service (vous pouvez aussi utiliser le compte Compute par défaut pour les deux) :
-
-Compte de service pour Cloud Run :
-
-Rôles requis : Secret Manager Secret Accessor, Cloud Datastore User.
-
-Compte de service pour Cloud Function :
-
-Rôles requis : Secret Manager Secret Accessor, Cloud Datastore User.
-
-5. Déployer la Cloud Function (Moteur)
-
-Naviguez dans le dossier payflow-function et exécutez :
-
+```
 # Remplacez [PROJECT_ID] et [SERVICE_ACCOUNT_EMAIL]
-gcloud functions deploy process_monthly_import `
-  --runtime python310 `
-  --trigger-topic payflow-monthly-trigger `
-  --entry-point process_monthly_import `
-  --region europe-west1 `
-  --project=[PROJECT_ID] `
-  --set-env-vars="GCP_PROJECT=[PROJECT_ID]" `
-  --service-account=[SERVICE_ACCOUNT_EMAIL] `
+gcloud functions deploy process_monthly_import \
+  --runtime python310 \
+  --trigger-topic payflow-monthly-trigger \
+  --entry-point process_monthly_import \
+  --region europe-west1 \
+  --project=[PROJECT_ID] \
+  --set-env-vars="GCP_PROJECT=[PROJECT_ID]" \
+  --service-account=[SERVICE_ACCOUNT_EMAIL] \
   --timeout=540s
+```
 
+### 6. Déploiement de l’Application Streamlit (Tableau de Bord)
 
-6. Déployer l'App Streamlit (Tableau de Bord)
-
-Naviguez dans le dossier payflow-app et exécutez :
-
+```
 # Remplacez [PROJECT_ID] et [SERVICE_ACCOUNT_EMAIL]
-gcloud run deploy payflow-app `
-  --source . `
-  --platform managed `
-  --region europe-west1 `
-  --allow-unauthenticated `
-  --project=[PROJECT_ID] `
-  --set-env-vars="GCP_PROJECT=[PROJECT_ID]" `
+gcloud run deploy payflow-app \
+  --source . \
+  --platform managed \
+  --region europe-west1 \
+  --allow-unauthenticated \
+  --project=[PROJECT_ID] \
+  --set-env-vars="GCP_PROJECT=[PROJECT_ID]" \
   --service-account=[SERVICE_ACCOUNT_EMAIL]
+```
 
+### 7. Planificateur (Déclencheur) 🗓️
 
-7. Configurer le Planificateur (Déclencheur) 🗓️
+Créer une tâche dans **Cloud Scheduler** :
 
-Allez dans Cloud Scheduler.
+| Champ            | Valeur                               |
+|------------------|--------------------------------------|
+| Nom              | payflow-daily-trigger                |
+| Fréquence        | 0 3 * * * (tous les jours à 3h)       |
+| Fuseau horaire   | Europe/Paris                         |
+| Cible            | Pub/Sub                              |
+| Sujet            | payflow-monthly-trigger              |
+| Charge utile     | *(vide)*                             |
 
-Créez une tâche :
+---
 
-Nom : payflow-daily-trigger
+## 💻 Utilisation
 
-Fréquence : 0 3 * * * (Tous les jours à 3h00 du matin)
+### 1. Configuration initiale (Admin)
 
-Fuseau horaire : Europe/Paris
+- L’admin doit configurer la **Liaison Comptable** pour chaque client dans Silae.  
+  Les numéros de compte doivent correspondre à ceux d’Odoo (aucun mapping n’est fait).  
+- Ouvrir l’application PayFlow (Cloud Run URL).  
+- Onglet ⚙️ **Administration des Clients** :
+  - Ajouter un client :
+    - Numéro dossier Silae  
+    - Nom du client  
+    - Jour de transfert (ex : 10)
+    - Connexions Odoo (Hôte, Base, Login, Clé API)
+  - Tester la connexion et sélectionner :
+    - Société Odoo  
+    - Journal Paie  
+  - Sauvegarder.
 
-Cible : Pub/Sub
+### 2. Monitoring (Utilisateur)
 
-Sujet : payflow-monthly-trigger
+- L’exécution est automatique.  
+- Dans 📊 **Journal des Exécutions**, les statuts possibles sont :
+  - SUCCESS : Import réussi  
+  - ERROR_ACCOUNT : Liaison comptable incorrecte dans Silae  
+  - ERROR_ODOO_RPC : Erreur liée à Odoo (identifiants, société, etc.)
 
-Charge utile : Laissez vide.
+### 3. Import manuel (Admin)
 
-Créez la tâche.
+- Onglet ⚡ **Import Manuel**
+  - Sélectionner un client et une période.  
+  - Cliquer sur "Lancer l’import".  
+  - Le résultat est affiché et loggé dans Firestore.
+```
 
-💻 Utilisation
-
-1. Configuration Initiale (par l'Admin)
-
-Point crucial : L'admin doit se connecter à Silae et configurer la Liaison Comptable pour chaque client. Les numéros de compte dans Silae doivent correspondre exactement aux numéros de compte dans Odoo. PayFlow ne fait pas de mapping.
-
-Ouvrez l'application PayFlow (l'URL fournie par Cloud Run).
-
-Allez à l'onglet "⚙️ Administration des Clients".
-
-Ajoutez un client en remplissant le formulaire :
-
-Numéro Dossier Silae
-
-Nom du client
-
-Jour du mois pour le transfert (ex: 10 pour que l'import se fasse le 10 de chaque mois)
-
-Les informations de connexion Odoo (Hôte, Base, Login, Clé API)
-
-Testez la connexion pour charger les Sociétés et Journaux.
-
-Sélectionnez la bonne Société Odoo (très important en multi-société).
-
-Sélectionnez le Journal Paie Odoo approprié.
-
-Sauvegardez le client.
-
-2. Monitoring (par l'utilisateur)
-
-L'exécution est automatique.
-
-L'utilisateur se connecte à PayFlow et ouvre l'onglet "📊 Journal des Exécutions".
-
-Le tableau de bord affiche les succès (SUCCESS) et les échecs (ERROR).
-
-Si status = ERROR_ACCOUNT : L'utilisateur doit contacter l'admin pour corriger la Liaison Comptable dans Silae (un compte est manquant ou erroné).
-
-Si status = ERROR_ODOO_RPC : L'utilisateur doit contacter l'admin pour vérifier les identifiants Odoo (clé API expirée, etc.).
-
-Si status = ERROR_ODOO_RPC: <Fault ... company inconsistencies ...> : L'admin doit corriger la Société Odoo sélectionnée dans l'onglet Admin de PayFlow.
-
-3. Import Manuel (par l'Admin)
-
-En cas d'erreur ou de besoin urgent, l'admin peut aller dans l'onglet "⚡ Import Manuel".
-
-Sélectionnez un client et une période.
-
-Cliquez sur "Lancer l'import".
-
-Le résultat s'affichera à l'écran et sera également écrit dans le journal des logs.
